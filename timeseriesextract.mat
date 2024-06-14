@@ -1,0 +1,68 @@
+%%
+% List of subject codes
+subject_codes = {'101309'}; %Add all codes...gender-wise
+% PATHS
+mask_path = 'D:\Brainmasks_and_ROImasks\';
+results_path = 'D:\Results\';
+%% Load mask ROI cortex+subsorctex ans cerebellum
+cortsubcort_mask_file = strcat(mask_path,'Schaefer2018_400Parcels_7Networks_order_Tian_Subcortex_S4_MNI152NLin6Asym_2mm.nii');
+cortsubcort_mask = spm_vol(cortsubcort_mask_file);
+[cortsubcortmask_data, cortsubcortmask_xyz] = spm_read_vols(cortsubcort_mask);
+num_rois_cortsubcort = max(cortsubcortmask_data(:));% Get the number of ROIs
+cerbs_mask_file = strcat(mask_path,'CerBS_38ROI.nii');
+cerbs_mask = spm_vol(cerbs_mask_file);
+[cerbsmask_data, cerbsmask_xyz] = spm_read_vols(cerbs_mask);
+num_rois_cerbs = max(cerbsmask_data(:));% Get the number of ROIs
+num_rois = num_rois_cortsubcort + num_rois_cerbs;
+%%
+% Loop through each subject
+for subj_idx = 1:length(subject_codes)
+subject_code = subject_codes{subj_idx};
+subject_data{subj_idx}.subject_code = subject_code;%save subject code
+% Loop through each run
+for data_idx = 1:2
+m = data_idx
+%         for i = 1:num_scans
+%Modify next line accordingly for your data path..before this extract nii file manually
+if data_idx == 1%LR
+data_file = sprintf('D:\\images\\%s_3T_tfMRI_EMOTION_preproc\\%s\\MNINonLinear\\Results\\tfMRI_EMOTION_LR\\tfMRI_EMOTION_LR.nii',subject_code,subject_code);
+physio_file = sprintf('D:\\images\\%s_3T_tfMRI_EMOTION_preproc\\%s\\MNINonLinear\\Results\\tfMRI_EMOTION_LR\\tfMRI_EMOTION_LR_Physio_log.txt',subject_code,subject_code);
+subject_data{subj_idx}.time_series_physioLR = importdata(physio_file);%3 column data
+else%RL
+data_file = sprintf('D:\\images\\%s_3T_tfMRI_EMOTION_preproc\\%s\\MNINonLinear\\Results\\tfMRI_EMOTION_RL\\tfMRI_EMOTION_RL.nii',subject_code,subject_code);
+physio_file = sprintf('D:\\images\\%s_3T_tfMRI_EMOTION_preproc\\%s\\MNINonLinear\\Results\\tfMRI_EMOTION_RL\\tfMRI_EMOTION_RL_Physio_log.txt',subject_code,subject_code);
+subject_data{subj_idx}.time_series_physioRL = importdata(physio_file);
+end
+data_vols = spm_vol(data_file);
+num_vols = length(data_vols);
+[data_img, data_xyz] = spm_read_vols(data_vols);
+% Loop through each ROI and extract time series
+for roi_idx = 1:num_rois
+if roi_idx <= 454
+roi_mask = (cortsubcortmask_data == roi_idx);
+else %455:492
+roi_mask = (cerbsmask_data == roi_idx-454);
+end
+num_voxelmask = length(find(roi_mask));
+roi_mask_rep = repmat(roi_mask,1,1,1,num_vols);
+roi_time_series = reshape(sum(data_img.*roi_mask_rep,[1,2,3]),num_vols,1)/num_voxelmask;
+% Append the time series to the corresponding matrix
+if data_idx == 1
+time_series_matrix_dataLR(1:num_vols, roi_idx) = roi_time_series;
+else
+time_series_matrix_dataRL(1:num_vols, roi_idx) = roi_time_series;
+end
+end
+%         end
+end
+% Concatenate
+%     time_series_matrix_combined = vertcat(time_series_matrix_dataLR, time_series_matrix_dataRL);
+% Store  time series data in cell array
+subject_data{subj_idx}.time_series_brainLR = time_series_matrix_dataLR;
+subject_data{subj_idx}.time_series_brainRL = time_series_matrix_dataRL;
+end
+%% Read Physiological Log File
+% Save cell array containing subject codes and time series matrices
+cd(results_path)
+save('Emotion_101309_parti_data_physio_492ROI.mat', 'subject_data'); %Modify file name accordingly e.g.... REST1_100_parti_data_physio_492ROI.mat
+disp('Time series extraction complete.');
